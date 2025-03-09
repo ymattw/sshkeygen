@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -13,22 +14,24 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func main() {
-	log.SetFlags(0)
+var ignoreCase bool
 
-	if len(os.Args) < 2 {
+func main() {
+	flag.BoolVar(&ignoreCase, "i", false, "Ignore case when comparing the suffix")
+	flag.Parse()
+	log.SetFlags(0)
+	suffixes := flag.Args()
+	if len(suffixes) == 0 {
 		log.Fatalf("Usage: %s <suffix>...", os.Args[0])
 	}
-
-	suffixes := os.Args[1:]
 
 	startTime := time.Now()
 	i := 0
 	found := 0
 	for {
 		i++
-		if i%10000 == 0 {
-			log.Printf("Tried %d times (%.1f keys/sec), found %d pairs", i, float64(i)/time.Since(startTime).Seconds(), found)
+		if i%1_000_000 == 0 {
+			log.Printf("Generated %dM key pairs (%.f pairs/sec), hit %d", i/1_000_000, float64(i)/time.Since(startTime).Seconds(), found)
 		}
 
 		privateKeyPEM, publicKeyBytes, base64Data, err := generateKeys()
@@ -86,9 +89,14 @@ func generateKeys() ([]byte, []byte, string, error) {
 }
 
 func hasSuffix(s string, suffixes []string) bool {
-	lower := strings.ToLower(s)
+	if ignoreCase {
+		s = strings.ToLower(s)
+	}
 	for _, suffix := range suffixes {
-		if strings.HasSuffix(lower, suffix) {
+		if ignoreCase {
+			suffix = strings.ToLower(suffix)
+		}
+		if strings.HasSuffix(s, suffix) {
 			return true
 		}
 	}
