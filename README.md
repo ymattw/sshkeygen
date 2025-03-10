@@ -1,12 +1,13 @@
 # sshkeygen
 
-Generate ED25519 SSH key pairs that have public key containing a desired suffix.
+Brute-force searching ED25519 SSH key pairs that have public key containing
+desired suffixes.
 
 ## Usage
 
 ```
 % make
-% ./sshkeygen [-i] [-n numCores] <suffix>...
+% ./sshkeygen [-i] [-n numWorkers] <suffix>...
 ```
 
 Options:
@@ -28,14 +29,20 @@ To stop the program, press `Ctrl+C`.
 
 ### Performance
 
-On a decent VPS with two workers, it can search ~72K key pairs per second:
+On an Apple M1 Pro machine, running with 4 workers can search ~160K key pairs
+per second.
+
+On a decent VPS with 4 vCore 8G memory, running with 2 workers can search ~75K
+key pairs per second.
+
+So depending on your hardware -
 
 - Searching a 3-letter suffix such as `/me` only takes a few seconds.
 - Searching a 4-letter suffix such as `/git` takes a few minutes.
 - Longer suffix might take a from a few hours up to a whole night.
 
-As a real example, with two workers, it took me about only 1 hour to find this
-cool key pair ([public key](https://github.com/ymattw.keys)):
+As a real example, with 4 workers on Appe M1 Pro, it took me about only 1 hour
+to find this cool key pair ([public key](https://github.com/ymattw.keys)):
 
 ```
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILSA8ZP10IhOrHcUSO35tlZvX4WIcqggt5nvKAA/Matt

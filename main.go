@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -20,6 +22,43 @@ var (
 	ignoreCase bool
 	numWorkers int
 )
+
+// Per-worker random source
+type worker struct {
+	rng io.Reader
+}
+
+func newWorker() (*worker, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, 24)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+
+	cipher, err := chacha20.NewUnauthenticatedCipher(key, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	return &worker{
+		rng: &chacha20Reader{cipher: cipher},
+	}, nil
+}
+
+type chacha20Reader struct {
+	cipher *chacha20.Cipher
+}
+
+func (r *chacha20Reader) Read(p []byte) (int, error) {
+	// Generate keystream by XORing with zero-filled buffer
+	zeros := make([]byte, len(p))
+	r.cipher.XORKeyStream(p, zeros)
+	return len(p), nil
+}
 
 func main() {
 	flag.BoolVar(&ignoreCase, "i", false, "Ignore case when comparing the suffix")
@@ -48,8 +87,15 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			w, err := newWorker()
+			if err != nil {
+				log.Printf("Failed to initialize worker: %v", err)
+				return
+			}
+
 			for {
-				privateKeyPEM, publicKeyBytes, base64Data, err := generateKeys()
+				privateKeyPEM, publicKeyBytes, base64Data, err := generateKeys(w.rng)
 				if err != nil {
 					log.Printf("Error generating keys: %v", err)
 					continue
@@ -90,8 +136,8 @@ func main() {
 	wg.Wait()
 }
 
-func generateKeys() ([]byte, []byte, string, error) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+func generateKeys(rng io.Reader) ([]byte, []byte, string, error) {
+	_, priv, err := ed25519.GenerateKey(rng)
 	if err != nil {
 		return nil, nil, "", err
 	}
