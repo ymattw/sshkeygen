@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -76,6 +77,8 @@ func main() {
 	log.Printf("Searching with %d worker(s), case %ssensitive",
 		numWorkers, map[bool]string{true: "in", false: ""}[ignoreCase])
 
+	passphrase := []byte(os.Getenv("PASSPHRASE"))
+
 	var (
 		counter int64
 		found   int64
@@ -95,28 +98,33 @@ func main() {
 			}
 
 			for {
-				privateKeyPEM, publicKeyBytes, base64Data, err := generateKeys(w.rng)
+				pub, priv, err := ed25519.GenerateKey(w.rng)
 				if err != nil {
 					log.Printf("Error generating keys: %v", err)
 					continue
 				}
 				atomic.AddInt64(&counter, 1)
 
-				if hasSuffix(base64Data, suffixes) {
-					atomic.AddInt64(&found, 1)
-					keyFile := fmt.Sprintf("%d.key", time.Now().UnixNano())
-					pubFile := keyFile + ".pub"
-
-					if err := os.WriteFile(keyFile, privateKeyPEM, 0600); err != nil {
-						log.Printf("Failed to write private key: %v", err)
-						continue
-					}
-					if err := os.WriteFile(pubFile, publicKeyBytes, 0644); err != nil {
-						log.Printf("Failed to write public key: %v", err)
-						continue
-					}
-					log.Printf("Found %s -> %s", string(publicKeyBytes), pubFile)
+				pubKey := publicKeyString(pub)
+				if !hasSuffix(pubKey, suffixes) {
+					continue
 				}
+
+				atomic.AddInt64(&found, 1)
+				privKey := privateKeyPEM(priv, passphrase)
+
+				keyFile := fmt.Sprintf("%d.key", time.Now().UnixNano())
+				pubFile := keyFile + ".pub"
+
+				if err := os.WriteFile(keyFile, privKey, 0600); err != nil {
+					log.Printf("Failed to write private key: %v", err)
+					continue
+				}
+				if err := os.WriteFile(pubFile, []byte(pubKey+"\n"), 0644); err != nil {
+					log.Printf("Failed to write public key: %v", err)
+					continue
+				}
+				log.Printf("Found %s -> %s", pubKey, pubFile)
 			}
 		}()
 	}
@@ -136,33 +144,19 @@ func main() {
 	wg.Wait()
 }
 
-func generateKeys(rng io.Reader) ([]byte, []byte, string, error) {
-	_, priv, err := ed25519.GenerateKey(rng)
-	if err != nil {
-		return nil, nil, "", err
-	}
+func publicKeyString(pub ed25519.PublicKey) string {
+	sshPubKey, _ := ssh.NewPublicKey(pub)
+	return fmt.Sprintf("%s %s", sshPubKey.Type(), base64.StdEncoding.EncodeToString(sshPubKey.Marshal()))
+}
 
-	signer, err := ssh.NewSignerFromKey(priv)
-	if err != nil {
-		return nil, nil, "", err
+func privateKeyPEM(priv ed25519.PrivateKey, passphrase []byte) []byte {
+	var block *pem.Block
+	if len(passphrase) > 0 {
+		block, _ = ssh.MarshalPrivateKeyWithPassphrase(priv, "" /*comment*/, passphrase)
+	} else {
+		block, _ = ssh.MarshalPrivateKey(priv, "" /*comment*/)
 	}
-
-	// Fixed PEM encoding
-	pemBlock, err := ssh.MarshalPrivateKey(priv, "")
-	if err != nil {
-		return nil, nil, "", err
-	}
-	pemBytes := pem.EncodeToMemory(pemBlock)
-
-	publicKeyBytes := ssh.MarshalAuthorizedKey(signer.PublicKey())
-	publicKeyStr := strings.TrimSpace(string(publicKeyBytes))
-	parts := strings.Split(publicKeyStr, " ")
-	if len(parts) < 2 {
-		return nil, nil, "", fmt.Errorf("invalid public key format: %s", publicKeyStr)
-	}
-	base64Data := parts[1]
-
-	return pemBytes, publicKeyBytes, base64Data, nil
+	return pem.EncodeToMemory(block)
 }
 
 func hasSuffix(s string, suffixes []string) bool {

@@ -7,6 +7,10 @@ desired suffixes.
 
 ```
 % make
+
+% read -s PASSPHRASE; export PASSPHRASE
+(enter a passphrase to protect the private key, optional)
+
 % ./sshkeygen [-i] [-n numWorkers] <suffix>...
 ```
 
@@ -29,10 +33,10 @@ To stop the program, press `Ctrl+C`.
 
 ### Performance
 
-On an Apple M1 Pro machine, running with 4 workers can search ~160K key pairs
+On an Apple M1 Pro machine, running with 4 workers can search ~207K key pairs
 per second.
 
-On a decent VPS with 4 vCore 8G memory, running with 2 workers can search ~75K
+On a decent VPS with 4 vCore 8G memory, running with 2 workers can search ~90K
 key pairs per second.
 
 So depending on your hardware -
@@ -42,8 +46,4 @@ So depending on your hardware -
 - Longer suffix might take a from a few hours up to a whole night.
 
 As a real example, with 4 workers on Appe M1 Pro, it took me about only 1 hour
-to find this cool key pair ([public key](https://github.com/ymattw.keys)):
-
-```
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILSA8ZP10IhOrHcUSO35tlZvX4WIcqggt5nvKAA/Matt
-```
+to find this cool key pair ([public key](https://github.com/ymattw.keys)).
