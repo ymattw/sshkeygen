@@ -74,10 +74,11 @@ func main() {
 	if numWorkers < 1 {
 		log.Fatal("Number of workers must be at least 1")
 	}
-	log.Printf("Searching with %d worker(s), case %ssensitive",
-		numWorkers, map[bool]string{true: "in", false: ""}[ignoreCase])
 
 	passphrase := []byte(os.Getenv("PASSPHRASE"))
+	log.Printf("Searching with %d worker(s), case %ssensitive, private key will %s passphrase protected",
+		numWorkers, map[bool]string{true: "in", false: ""}[ignoreCase],
+		map[bool]string{true: "be", false: "NOT be"}[len(passphrase) > 0])
 
 	var (
 		counter int64
@@ -124,7 +125,8 @@ func main() {
 					log.Printf("Failed to write public key: %v", err)
 					continue
 				}
-				log.Printf("Found %s -> %s", pubKey, pubFile)
+				// Clear the current line and move cursor back to the start
+				log.Printf("\r\x1b[KFound %s -> %s*", pubKey, keyFile)
 			}
 		}()
 	}
@@ -135,9 +137,11 @@ func main() {
 		defer ticker.Stop()
 
 		for range ticker.C {
+			elapsed := time.Since(start)
 			hits := atomic.LoadInt64(&found)
-			log.Printf("Searched %.1fM key pairs (%.f pairs/sec), hit %d",
-				float64(counter)/1_000_000, float64(counter)/time.Since(start).Seconds(), hits)
+			// Clear the current line and move cursor back to the start
+			fmt.Printf("\r\x1b[KSearched %.1fM key pairs in %s (%.fK pairs/sec), hit %d",
+				float64(counter)/1_000_000, elapsed.Round(time.Second), float64(counter)/1000/elapsed.Seconds(), hits)
 		}
 	}()
 
